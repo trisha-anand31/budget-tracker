@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Budget Tracker</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -51,6 +54,23 @@
   #import-btn { width: 100%; padding: 9px 12px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.15s; }
   #import-btn:hover { background: var(--accent-hover); }
   #file-input { display: none; }
+
+  /* Auth UI */
+  #auth-section { padding: 12px 16px; border-top: 1px solid var(--border); margin-top: auto; }
+  #auth-section .signed-out { display: flex; flex-direction: column; gap: 8px; }
+  #auth-section .signed-in { display: flex; align-items: center; gap: 10px; }
+  #auth-section .user-avatar { width: 32px; height: 32px; border-radius: 50%; }
+  #auth-section .user-info { flex: 1; min-width: 0; }
+  #auth-section .user-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #auth-section .user-email { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sign-in-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  #sign-in-btn:hover { background: var(--bg); border-color: var(--accent); }
+  #sign-in-btn svg { width: 18px; height: 18px; }
+  #sign-out-btn { padding: 6px 10px; background: none; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; cursor: pointer; color: var(--muted); }
+  #sign-out-btn:hover { background: var(--bg); color: var(--text); }
+  .sync-status { font-size: 11px; color: var(--muted); text-align: center; margin-top: 6px; }
+  .sync-status.syncing { color: var(--accent); }
+  .sync-status.error { color: #dc2626; }
 
   /* Main */
   #main { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; }
@@ -393,6 +413,24 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       Import CSV
     </button>
+  </div>
+  <div id="auth-section">
+    <div class="signed-out" id="auth-signed-out">
+      <button id="sign-in-btn" onclick="signInWithGoogle()">
+        <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Sign in with Google
+      </button>
+      <div class="sync-status">Sign in to sync across devices</div>
+    </div>
+    <div class="signed-in" id="auth-signed-in" style="display:none">
+      <img class="user-avatar" id="user-avatar" src="" alt="">
+      <div class="user-info">
+        <div class="user-name" id="user-name"></div>
+        <div class="user-email" id="user-email"></div>
+      </div>
+      <button id="sign-out-btn" onclick="signOutUser()">Sign out</button>
+    </div>
+    <div class="sync-status" id="sync-status" style="display:none"></div>
   </div>
 </aside>
 
@@ -889,6 +927,25 @@
 
 <script>
 // ============================================================
+// FIREBASE SETUP
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyAI-X5kXlgaf5-65iOX1lxWRTuJWzOCx7s",
+  authDomain: "budget-tracker-b40a8.firebaseapp.com",
+  projectId: "budget-tracker-b40a8",
+  storageBucket: "budget-tracker-b40a8.firebasestorage.app",
+  messagingSenderId: "527889051592",
+  appId: "1:527889051592:web:97b76fa3bafebd72f25afd"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const firestore = firebase.firestore();
+
+let currentUser = null;
+let isSyncing = false;
+
+// ============================================================
 // DATA & CONSTANTS
 // ============================================================
 const DEFAULT_CATEGORIES = [
@@ -991,7 +1048,13 @@ let chartInstances = {};
 // STORAGE
 // ============================================================
 function saveDB() {
+  // Always save to localStorage as backup
   try { localStorage.setItem('budget_v1', JSON.stringify(db)); } catch(e) { showToast('Storage full — some data may not be saved', 'error'); }
+
+  // If signed in, also save to Firestore
+  if (currentUser && !isSyncing) {
+    saveToFirestore();
+  }
 }
 
 function loadDB() {
@@ -1006,6 +1069,138 @@ function loadDB() {
       db.categories = saved.categories || [...DEFAULT_CATEGORIES];
     }
   } catch(e) { console.error('Failed to load DB', e); }
+}
+
+// Firestore sync functions
+let saveTimeout = null;
+function saveToFirestore() {
+  if (!currentUser) return;
+
+  // Debounce saves to avoid too many writes
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(async () => {
+    try {
+      updateSyncStatus('Syncing...', 'syncing');
+      await firestore.collection('users').doc(currentUser.uid).set({
+        db: JSON.stringify(db),
+        savedCalcs: localStorage.getItem('budget_saved_calcs') || '[]',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      updateSyncStatus('Synced', '');
+      setTimeout(() => updateSyncStatus('', ''), 2000);
+    } catch(e) {
+      console.error('Firestore save error:', e);
+      updateSyncStatus('Sync failed', 'error');
+    }
+  }, 1000);
+}
+
+async function loadFromFirestore() {
+  if (!currentUser) return false;
+
+  try {
+    updateSyncStatus('Loading...', 'syncing');
+    const doc = await firestore.collection('users').doc(currentUser.uid).get();
+    if (doc.exists) {
+      const data = doc.data();
+      if (data.db) {
+        const saved = JSON.parse(data.db);
+        db.statements = saved.statements || [];
+        db.merchantRules = saved.merchantRules || [...DEFAULT_RULES];
+        db.transactionEdits = saved.transactionEdits || {};
+        db.settings = saved.settings || { monthlyIncome: 0, fixedExpenses: 0, targetSavings: 0 };
+        db.categories = saved.categories || [...DEFAULT_CATEGORIES];
+        // Also update localStorage
+        localStorage.setItem('budget_v1', data.db);
+      }
+      if (data.savedCalcs) {
+        localStorage.setItem('budget_saved_calcs', data.savedCalcs);
+      }
+      updateSyncStatus('Synced', '');
+      setTimeout(() => updateSyncStatus('', ''), 2000);
+      return true;
+    }
+    updateSyncStatus('', '');
+    return false;
+  } catch(e) {
+    console.error('Firestore load error:', e);
+    updateSyncStatus('Load failed', 'error');
+    return false;
+  }
+}
+
+function updateSyncStatus(text, className) {
+  const el = document.getElementById('sync-status');
+  if (text) {
+    el.style.display = 'block';
+    el.textContent = text;
+    el.className = 'sync-status ' + className;
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+// Auth functions
+function signInWithGoogle() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    console.error('Sign in error:', err);
+    showToast('Sign in failed: ' + err.message, 'error');
+  });
+}
+
+function signOutUser() {
+  auth.signOut().catch(err => {
+    console.error('Sign out error:', err);
+  });
+}
+
+// Listen for auth state changes
+auth.onAuthStateChanged(async (user) => {
+  currentUser = user;
+  const signedOutEl = document.getElementById('auth-signed-out');
+  const signedInEl = document.getElementById('auth-signed-in');
+
+  if (user) {
+    // User is signed in
+    signedOutEl.style.display = 'none';
+    signedInEl.style.display = 'flex';
+    document.getElementById('user-avatar').src = user.photoURL || '';
+    document.getElementById('user-name').textContent = user.displayName || 'User';
+    document.getElementById('user-email').textContent = user.email || '';
+
+    // Load data from Firestore
+    isSyncing = true;
+    const loaded = await loadFromFirestore();
+    isSyncing = false;
+
+    if (loaded) {
+      // Refresh the UI with cloud data
+      renderAll();
+      showToast('Data synced from cloud');
+    } else {
+      // No cloud data yet, upload current local data
+      saveToFirestore();
+    }
+  } else {
+    // User is signed out
+    signedOutEl.style.display = 'flex';
+    signedInEl.style.display = 'none';
+    document.getElementById('sync-status').style.display = 'none';
+  }
+});
+
+function renderAll() {
+  document.getElementById('goal-income').value = db.settings.monthlyIncome || '';
+  document.getElementById('goal-fixed').value = db.settings.fixedExpenses || '';
+  document.getElementById('goal-savings').value = db.settings.targetSavings || '';
+  populateTxFilters();
+  renderCategories();
+  renderFileList();
+  renderTransactions();
+  renderRules();
+  if (currentView === 'overview') renderOverview();
+  if (currentView === 'trends') renderTrends();
 }
 
 // ============================================================
@@ -3067,6 +3262,8 @@ function getSavedCalcs() {
 
 function saveSavedCalcs(calcs) {
   localStorage.setItem('budget_saved_calcs', JSON.stringify(calcs));
+  // Sync to cloud if signed in
+  if (currentUser) saveToFirestore();
 }
 
 function saveCurrentCalc() {
