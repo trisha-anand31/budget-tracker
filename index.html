@@ -2038,13 +2038,13 @@ function renderTransactions() {
     const hasNote = !!(edit.note && edit.note.trim());
     const displayDesc = edit.description || t.description;
 
-    // Row highlight logic (priority: flagged > reviewed > others)
+    // Row highlight logic (priority: flagged > owed/request > reviewed > needs review)
     const owedPending = !t.isReturn && owed > 0.01 && !requested;
     const needsReview = !t.isReturn && t.amount >= 50 && !hasSplit && !noSplitNeeded && !flagged;
     let rowClass = '';
     if (flagged) rowClass = 'row-flagged';
-    else if (reviewed) rowClass = 'row-reviewed';
     else if (owedPending) rowClass = 'row-needs-request';
+    else if (reviewed) rowClass = 'row-reviewed';
     else if (needsReview) rowClass = 'row-needs-review';
 
     const myShareFmt = t.isReturn
