@@ -2004,14 +2004,14 @@ function renderTransactions() {
     const hasNote = !!(edit.note && edit.note.trim());
     const displayDesc = edit.description || t.description;
 
-    // Row highlight logic (priority: owed > flagged > $50 review > reviewed)
+    // Row highlight logic (priority: flagged > reviewed > others)
     const owedPending = !t.isReturn && owed > 0.01 && !requested;
     const needsReview = !t.isReturn && t.amount >= 50 && !hasSplit && !noSplitNeeded && !flagged;
     let rowClass = '';
-    if (owedPending) rowClass = 'row-needs-request';
-    else if (flagged) rowClass = 'row-flagged';
-    else if (needsReview) rowClass = 'row-needs-review';
+    if (flagged) rowClass = 'row-flagged';
     else if (reviewed) rowClass = 'row-reviewed';
+    else if (owedPending) rowClass = 'row-needs-request';
+    else if (needsReview) rowClass = 'row-needs-review';
 
     const myShareFmt = t.isReturn
       ? `<span class="amount-pos">—</span>`
@@ -2264,7 +2264,16 @@ function toggleReviewed(id, checked) {
   // Update row class without full re-render
   const row = findRowById(id);
   if (row) {
-    row.classList.toggle('row-reviewed', checked);
+    const isFlagged = row.classList.contains('row-flagged');
+    if (checked && !isFlagged) {
+      // Reviewed overrides other states (except flagged)
+      row.classList.remove('row-needs-request', 'row-needs-review');
+      row.classList.add('row-reviewed');
+    } else if (!checked && !isFlagged) {
+      row.classList.remove('row-reviewed');
+      // Re-render to get correct state back
+      renderTransactions();
+    }
   }
 }
 
