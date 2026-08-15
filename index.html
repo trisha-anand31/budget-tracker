@@ -2149,7 +2149,7 @@ function renderTransactions() {
     }
     // Notes button
     actions.push(hasNote
-      ? `<button class="note-btn has-note" onclick="toggleNoteRow('${safeId}')" title="Edit note">📝 Note</button>`
+      ? `<button class="note-btn has-note" onclick="toggleNoteRow('${safeId}')" title="Hide/show note">📝 Note</button>`
       : `<button class="note-btn" onclick="toggleNoteRow('${safeId}')" title="Add note">📝</button>`);
     // Delete button
     actions.push(`<button class="del-btn" onclick="deleteTransaction('${safeId}')" title="Delete transaction">🗑</button>`);
@@ -2158,7 +2158,7 @@ function renderTransactions() {
       `<option value="${c}" ${c === t.category ? 'selected' : ''}>${c}</option>`
     ).join('');
 
-    return `<tr class="${rowClass}" data-txid="${escHtml(t.id)}">
+    const txRow = `<tr class="${rowClass}" data-txid="${escHtml(t.id)}">
       <td class="reviewed-cell"><input type="checkbox" class="reviewed-check" ${reviewed ? 'checked' : ''} onchange="toggleReviewed('${safeId}', this.checked)" title="Mark as reviewed"></td>
       <td style="white-space:nowrap;color:var(--muted)">${t.displayDate}</td>
       <td>${cardBadge(t.card)}</td>
@@ -2169,6 +2169,17 @@ function renderTransactions() {
       <td style="text-align:right">${owedFmt}</td>
       <td><div class="row-actions">${actions.join('')}</div></td>
     </tr>`;
+
+    // Include note row if note exists
+    const noteRow = hasNote ? `<tr class="note-row" data-noteid="${escHtml(t.id)}">
+      <td colspan="9">
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <textarea class="note-input" placeholder="Add a note..." rows="2" oninput="saveNote('${safeId}', this.value)">${escHtml(edit.note || '')}</textarea>
+        </div>
+      </td>
+    </tr>` : '';
+
+    return txRow + noteRow;
   }).join('');
 
   // Footer totals
