@@ -1386,7 +1386,6 @@ function confirmColumnMapping() {
   const dateCol = document.getElementById('col-date').value;
   const descCol = document.getElementById('col-desc').value;
   const amountCol = document.getElementById('col-amount').value;
-  const cardCol = document.getElementById('col-card').value;
   const categoryCol = document.getElementById('col-category').value;
   const typeCol = document.getElementById('col-type').value;
   const memoCol = document.getElementById('col-memo').value;
@@ -1410,7 +1409,7 @@ function confirmColumnMapping() {
       const txDate = row[dateCol] || '';
       const csvCategory = categoryCol ? (row[categoryCol] || '') : '';
       const memo = memoCol ? (row[memoCol] || '').trim() : '';
-      const card = cardCol ? (row[cardCol] || accountName) : accountName;
+      const card = accountName;
 
       if (!description || !txDate) continue;
 
