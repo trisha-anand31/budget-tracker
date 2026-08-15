@@ -527,6 +527,12 @@
       <div class="multi-select" id="tx-card-ms" data-filter="card"></div>
       <div class="multi-select" id="tx-category-ms" data-filter="category"></div>
       <div class="multi-select" id="tx-file-ms" data-filter="file"></div>
+      <select id="tx-reviewed-filter" onchange="updateReviewedFilter(this.value)">
+        <option value="">All Status</option>
+        <option value="reviewed">Reviewed</option>
+        <option value="unreviewed">Not Reviewed</option>
+      </select>
+      <input type="text" id="tx-desc-filter" placeholder="Search description..." oninput="updateDescFilter(this.value)" style="min-width:160px">
     </div>
     <div class="table-wrap table-scroll">
       <table id="tx-table">
@@ -1802,7 +1808,17 @@ function updateGoals(myShareTotal, fixedBills) {
 // TRANSACTIONS VIEW
 // ============================================================
 let txSort = { field: 'date', dir: 'desc' }; // default sort by date descending
-let txFilters = { month: [], card: [], category: [], file: [] };
+let txFilters = { month: [], card: [], category: [], file: [], reviewed: '', description: '' };
+
+function updateReviewedFilter(value) {
+  txFilters.reviewed = value;
+  renderTransactions();
+}
+
+function updateDescFilter(value) {
+  txFilters.description = value.toLowerCase().trim();
+  renderTransactions();
+}
 
 // Multi-select component
 function renderMultiSelect(containerId, label, options, filterKey) {
@@ -1944,6 +1960,20 @@ function renderTransactions() {
   if (txFilters.card.length) txs = txs.filter(t => txFilters.card.includes(t.card));
   if (txFilters.category.length) txs = txs.filter(t => txFilters.category.includes(t.category));
   if (txFilters.file.length) txs = txs.filter(t => txFilters.file.includes(t.sourceFile));
+  if (txFilters.reviewed) {
+    txs = txs.filter(t => {
+      const edit = db.transactionEdits[t.id] || {};
+      const isReviewed = !!edit.reviewed;
+      return txFilters.reviewed === 'reviewed' ? isReviewed : !isReviewed;
+    });
+  }
+  if (txFilters.description) {
+    txs = txs.filter(t => {
+      const edit = db.transactionEdits[t.id] || {};
+      const desc = (edit.description || t.description).toLowerCase();
+      return desc.includes(txFilters.description);
+    });
+  }
 
   // Apply sorting
   txs = [...txs].sort((a, b) => {
