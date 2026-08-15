@@ -1979,7 +1979,7 @@ function renderTransactions() {
 
     const myShareFmt = t.isReturn
       ? `<span class="amount-pos">—</span>`
-      : `<input class="edit-input" type="number" step="0.01" min="0" value="${t.myShare.toFixed(2)}" data-id="${escHtml(t.id)}" data-max="${t.amount}" onchange="updateMyShare(this)">`;
+      : `<input class="edit-input" type="text" value="${t.myShare.toFixed(2)}" data-id="${escHtml(t.id)}" data-max="${t.amount}" onchange="updateMyShare(this)" placeholder="e.g. =50-10">`;
     const owedFmt = owed > 0.01
       ? `<span class="amount-owed">-${fmt(owed)}</span>`
       : `<span style="color:var(--muted)">—</span>`;
@@ -2056,10 +2056,36 @@ function updateCategory(select) {
   showToast('Category saved', 'success');
 }
 
+function evaluateFormula(expr) {
+  // Remove = prefix and whitespace
+  expr = expr.replace(/^=/, '').trim();
+  // Only allow numbers, decimal points, and basic operators
+  if (!/^[\d.+\-*/\s()]+$/.test(expr)) return NaN;
+  try {
+    // Use Function constructor for safe evaluation (no access to global scope)
+    const result = new Function('return ' + expr)();
+    return typeof result === 'number' ? result : NaN;
+  } catch {
+    return NaN;
+  }
+}
+
 function updateMyShare(input) {
   const id = input.dataset.id;
   const max = parseFloat(input.dataset.max);
-  let val = parseFloat(input.value);
+  const raw = input.value.trim();
+
+  let val;
+  if (raw.startsWith('=')) {
+    val = evaluateFormula(raw);
+    if (isNaN(val)) {
+      showToast('Invalid formula', 'error');
+      return;
+    }
+  } else {
+    val = parseFloat(raw);
+  }
+
   if (isNaN(val) || val < 0) val = 0;
   if (val > max) val = max;
   input.value = val.toFixed(2);
