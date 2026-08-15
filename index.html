@@ -1503,7 +1503,7 @@ function getAllTransactions() {
   for (const stmt of db.statements) {
     for (const tx of stmt.transactions) {
       const edit = db.transactionEdits[tx.id] || {};
-      const defaultMyShare = tx.isReturn ? 0 : tx.amount;
+      const defaultMyShare = tx.amount;
       all.push({
         ...tx,
         sourceFile: stmt.filename,
@@ -1672,9 +1672,9 @@ function renderOverview() {
     totalFixed += t.category === 'Utilities' ? t.myShare : 0;
   }
   for (const t of returns) {
-    totalReturns += t.amount;
+    totalReturns += t.myShare;
     // Subtract returns from fixed if in Utilities category
-    if (t.category === 'Utilities') totalFixed -= t.amount;
+    if (t.category === 'Utilities') totalFixed -= t.myShare;
   }
   const netCharged = totalCharged - totalReturns;
   const netMyShare = totalMyShare - totalReturns;
@@ -1692,8 +1692,8 @@ function renderOverview() {
     cardGrid.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px">No data</div>';
   } else {
     cardGrid.innerHTML = cards.map(card => {
-      const cardExp = expenses.filter(t => t.card === card).reduce((s, t) => s + t.amount, 0);
-      const cardRet = returns.filter(t => t.card === card).reduce((s, t) => s + t.amount, 0);
+      const cardExp = expenses.filter(t => t.card === card).reduce((s, t) => s + t.myShare, 0);
+      const cardRet = returns.filter(t => t.card === card).reduce((s, t) => s + t.myShare, 0);
       const count = expenses.filter(t => t.card === card).length;
       return `
         <div class="breakdown-item">
@@ -1721,7 +1721,7 @@ function renderDonutChart(txs) {
   const catTotals = {};
   for (const t of txs) {
     if (t.isReturn) {
-      catTotals[t.category] = (catTotals[t.category] || 0) - t.amount;
+      catTotals[t.category] = (catTotals[t.category] || 0) - t.myShare;
     } else {
       catTotals[t.category] = (catTotals[t.category] || 0) + t.myShare;
     }
@@ -1753,7 +1753,7 @@ function renderCatBreakdown(txs) {
   const catTotals = {};
   for (const t of txs) {
     if (t.isReturn) {
-      catTotals[t.category] = (catTotals[t.category] || 0) - t.amount;
+      catTotals[t.category] = (catTotals[t.category] || 0) - t.myShare;
     } else {
       catTotals[t.category] = (catTotals[t.category] || 0) + t.myShare;
     }
@@ -2075,12 +2075,12 @@ function renderTransactions() {
   const totalCharged = expenses.reduce((s, t) => s + t.amount, 0);
   const totalMyShare = expenses.reduce((s, t) => s + t.myShare, 0);
   const totalOwed = totalCharged - totalMyShare;
-  const totalReturns = returns.reduce((s, t) => s + t.amount, 0);
+  const totalReturns = returns.reduce((s, t) => s + t.myShare, 0);
 
   foot.innerHTML = `<tr>
     <td colspan="5" style="text-align:right">Totals (${txs.length} transactions)</td>
     <td style="text-align:right">-${fmt(totalCharged)}${totalReturns > 0 ? ` <span class="amount-pos">+${fmt(totalReturns)}</span>` : ''}</td>
-    <td style="text-align:right">-${fmt(totalMyShare)}</td>
+    <td style="text-align:right">-${fmt(totalMyShare)}${totalReturns > 0 ? ` <span class="amount-pos">+${fmt(totalReturns)}</span>` : ''}</td>
     <td style="text-align:right">${totalOwed > 0.01 ? `<span class="amount-owed">-${fmt(totalOwed)}</span>` : '—'}</td>
     <td></td>
   </tr>`;
@@ -2342,10 +2342,10 @@ function renderTrends() {
   // Subtract returns
   for (const t of returns) {
     const m = t.date.substring(0, 7);
-    monthTotals[m] = (monthTotals[m] || 0) - t.amount;
+    monthTotals[m] = (monthTotals[m] || 0) - t.myShare;
     if (!catMonthTotals[t.category]) catMonthTotals[t.category] = {};
-    catMonthTotals[t.category][m] = (catMonthTotals[t.category][m] || 0) - t.amount;
-    catTotals[t.category] = (catTotals[t.category] || 0) - t.amount;
+    catMonthTotals[t.category][m] = (catMonthTotals[t.category][m] || 0) - t.myShare;
+    catTotals[t.category] = (catTotals[t.category] || 0) - t.myShare;
   }
 
   // Line chart
