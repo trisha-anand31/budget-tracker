@@ -2261,20 +2261,7 @@ function toggleReviewed(id, checked) {
   if (!db.transactionEdits[id]) db.transactionEdits[id] = {};
   db.transactionEdits[id].reviewed = checked;
   saveDB();
-  // Update row class without full re-render
-  const row = findRowById(id);
-  if (row) {
-    const isFlagged = row.classList.contains('row-flagged');
-    if (checked && !isFlagged) {
-      // Reviewed overrides other states (except flagged)
-      row.classList.remove('row-needs-request', 'row-needs-review');
-      row.classList.add('row-reviewed');
-    } else if (!checked && !isFlagged) {
-      row.classList.remove('row-reviewed');
-      // Re-render to get correct state back
-      renderTransactions();
-    }
-  }
+  renderTransactions();
 }
 
 function toggleNoteRow(id) {
