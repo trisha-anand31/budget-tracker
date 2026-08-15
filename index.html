@@ -531,6 +531,7 @@
         <option value="">All Status</option>
         <option value="reviewed">Reviewed</option>
         <option value="unreviewed">Not Reviewed</option>
+        <option value="flagged">Flagged</option>
       </select>
       <input type="text" id="tx-desc-filter" placeholder="Search description..." oninput="updateDescFilter(this.value)" style="min-width:160px">
     </div>
@@ -1963,8 +1964,10 @@ function renderTransactions() {
   if (txFilters.reviewed) {
     txs = txs.filter(t => {
       const edit = db.transactionEdits[t.id] || {};
-      const isReviewed = !!edit.reviewed;
-      return txFilters.reviewed === 'reviewed' ? isReviewed : !isReviewed;
+      if (txFilters.reviewed === 'reviewed') return !!edit.reviewed;
+      if (txFilters.reviewed === 'unreviewed') return !edit.reviewed;
+      if (txFilters.reviewed === 'flagged') return !!edit.flagged;
+      return true;
     });
   }
   if (txFilters.description) {
