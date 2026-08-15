@@ -2014,7 +2014,7 @@ function renderTransactions() {
     else if (needsReview) rowClass = 'row-needs-review';
 
     const myShareFmt = t.isReturn
-      ? `<span class="amount-pos">—</span>`
+      ? `<span class="amount-pos">+${fmt(t.amount)}</span>`
       : `<input class="edit-input" type="text" value="${t.myShare.toFixed(2)}" data-id="${escHtml(t.id)}" data-max="${t.amount}" onchange="updateMyShare(this)" placeholder="e.g. =50-10">`;
     const owedFmt = owed > 0.01
       ? `<span class="amount-owed">-${fmt(owed)}</span>`
