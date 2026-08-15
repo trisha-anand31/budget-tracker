@@ -291,6 +291,8 @@
   .split-item-name:focus { border-color: var(--accent); }
   .split-item-price { width: 70px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; outline: none; text-align: right; }
   .split-item-price:focus { border-color: var(--accent); }
+  .split-item-cat { width: 100px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; outline: none; background: var(--surface); }
+  .split-item-cat:focus { border-color: var(--accent); }
   .split-share-input { width: 38px; padding: 3px 4px; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; outline: none; text-align: center; }
   .split-share-input:focus { border-color: var(--accent); }
   .split-share-input.zero { background: #f8fafc; color: var(--muted); }
@@ -1721,17 +1723,80 @@ function renderOverview() {
   renderCatBreakdown(txs);
 }
 
+// Get category breakdown for a transaction (handles split item categories)
+function getTxCategoryBreakdown(t) {
+  const edit = db.transactionEdits[t.id] || {};
+  const splitCalc = edit.splitCalc;
+
+  // If no split calc or no items with prices, use transaction's category
+  if (!splitCalc || !splitCalc.items || !splitCalc.items.length) {
+    return { [t.category]: t.myShare };
+  }
+
+  // Calculate per-category amounts from split items
+  const catAmounts = {};
+  const n = splitCalc.people?.length || 2;
+  let totalItemSub = 0;
+  const itemMyShares = [];
+
+  splitCalc.items.forEach((item, idx) => {
+    const price = parseFloat(item.price) || 0;
+    if (price === 0) return;
+
+    let totalWeight = 0;
+    for (let pi = 0; pi < n; pi++) {
+      totalWeight += (item.shares?.[pi] || 0);
+    }
+    if (totalWeight <= 0) return;
+
+    // Calculate my share (person 0) of this item
+    const myWeight = item.shares?.[0] || 0;
+    const myItemShare = price * myWeight / totalWeight;
+    totalItemSub += price;
+    itemMyShares.push({ category: item.category || t.category, amount: myItemShare, price });
+  });
+
+  // Calculate tax/tip proportionally
+  const taxAmt = splitCalc.taxMode === 'percent'
+    ? totalItemSub * (splitCalc.taxValue || 0) / 100
+    : (splitCalc.taxValue || 0);
+  const tipAmt = splitCalc.tipMode === 'percent'
+    ? totalItemSub * (splitCalc.tipValue || 0) / 100
+    : (splitCalc.tipValue || 0);
+  const extra = taxAmt + tipAmt;
+
+  // Distribute extra proportionally and sum by category
+  itemMyShares.forEach(({ category, amount, price }) => {
+    let finalAmount = amount;
+    if (splitCalc.splitMethod === 'proportional' && totalItemSub > 0) {
+      finalAmount += extra * (price / totalItemSub) * (amount / price || 0);
+    }
+    catAmounts[category] = (catAmounts[category] || 0) + finalAmount;
+  });
+
+  // If there's remaining amount assigned to "me", add it to the main category
+  const remaining = (t.amount || 0) - (splitCalc.splitAmount || 0);
+  if (remaining > 0.01 && splitCalc.remainingOption === 'mine') {
+    catAmounts[t.category] = (catAmounts[t.category] || 0) + remaining;
+  }
+
+  return catAmounts;
+}
+
 function renderDonutChart(txs) {
   destroyChart('donut-chart');
   if (!txs.length) return;
 
-  // Calculate net spending per category (expenses minus returns)
+  // Calculate net spending per category (expenses minus returns, with split item categories)
   const catTotals = {};
   for (const t of txs) {
-    if (t.isReturn) {
-      catTotals[t.category] = (catTotals[t.category] || 0) - t.myShare;
-    } else {
-      catTotals[t.category] = (catTotals[t.category] || 0) + t.myShare;
+    const breakdown = getTxCategoryBreakdown(t);
+    for (const [cat, amt] of Object.entries(breakdown)) {
+      if (t.isReturn) {
+        catTotals[cat] = (catTotals[cat] || 0) - amt;
+      } else {
+        catTotals[cat] = (catTotals[cat] || 0) + amt;
+      }
     }
   }
 
@@ -1757,13 +1822,16 @@ function renderDonutChart(txs) {
 }
 
 function renderCatBreakdown(txs) {
-  // Calculate net spending per category (expenses minus returns)
+  // Calculate net spending per category (expenses minus returns, with split item categories)
   const catTotals = {};
   for (const t of txs) {
-    if (t.isReturn) {
-      catTotals[t.category] = (catTotals[t.category] || 0) - t.myShare;
-    } else {
-      catTotals[t.category] = (catTotals[t.category] || 0) + t.myShare;
+    const breakdown = getTxCategoryBreakdown(t);
+    for (const [cat, amt] of Object.entries(breakdown)) {
+      if (t.isReturn) {
+        catTotals[cat] = (catTotals[cat] || 0) - amt;
+      } else {
+        catTotals[cat] = (catTotals[cat] || 0) + amt;
+      }
     }
   }
   const sorted = Object.entries(catTotals).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
@@ -2359,27 +2427,33 @@ function renderTrends() {
 
   const months = getMonths(expenses).reverse(); // chronological
 
-  // Monthly totals (net of returns)
+  // Monthly totals (net of returns, with split item categories)
   const monthTotals = {};
   const catMonthTotals = {};
   const catTotals = {};
 
-  // Add expenses
+  // Add expenses (with per-item category breakdown)
   for (const t of expenses) {
     const m = t.date.substring(0, 7);
-    monthTotals[m] = (monthTotals[m] || 0) + t.myShare;
-    if (!catMonthTotals[t.category]) catMonthTotals[t.category] = {};
-    catMonthTotals[t.category][m] = (catMonthTotals[t.category][m] || 0) + t.myShare;
-    catTotals[t.category] = (catTotals[t.category] || 0) + t.myShare;
+    const breakdown = getTxCategoryBreakdown(t);
+    for (const [cat, amt] of Object.entries(breakdown)) {
+      monthTotals[m] = (monthTotals[m] || 0) + amt;
+      if (!catMonthTotals[cat]) catMonthTotals[cat] = {};
+      catMonthTotals[cat][m] = (catMonthTotals[cat][m] || 0) + amt;
+      catTotals[cat] = (catTotals[cat] || 0) + amt;
+    }
   }
 
-  // Subtract returns
+  // Subtract returns (with per-item category breakdown)
   for (const t of returns) {
     const m = t.date.substring(0, 7);
-    monthTotals[m] = (monthTotals[m] || 0) - t.myShare;
-    if (!catMonthTotals[t.category]) catMonthTotals[t.category] = {};
-    catMonthTotals[t.category][m] = (catMonthTotals[t.category][m] || 0) - t.myShare;
-    catTotals[t.category] = (catTotals[t.category] || 0) - t.myShare;
+    const breakdown = getTxCategoryBreakdown(t);
+    for (const [cat, amt] of Object.entries(breakdown)) {
+      monthTotals[m] = (monthTotals[m] || 0) - amt;
+      if (!catMonthTotals[cat]) catMonthTotals[cat] = {};
+      catMonthTotals[cat][m] = (catMonthTotals[cat][m] || 0) - amt;
+      catTotals[cat] = (catTotals[cat] || 0) - amt;
+    }
   }
 
   // Line chart
@@ -2774,7 +2848,7 @@ function openSplitModal(txId) {
   const saved = db.transactionEdits[txId]?.splitCalc;
   if (saved) {
     sc = {
-      txId, txAmount: tx.amount, txDesc: tx.description,
+      txId, txAmount: tx.amount, txDesc: tx.description, txCategory: tx.category,
       mode: saved.mode || 'quick',
       splitAmount: saved.splitAmount !== undefined ? saved.splitAmount : tx.amount,
       remainingOption: saved.remainingOption || 'mine',
@@ -2783,10 +2857,10 @@ function openSplitModal(txId) {
       quickAmounts: saved.quickAmounts ? [...saved.quickAmounts] : saved.people.map(() => 0),
       items: saved.items.map(it => {
         // Convert old sharedBy format to new shares format
-        if (it.shares) return { ...it, shares: { ...it.shares } };
+        if (it.shares) return { ...it, category: it.category || tx.category, shares: { ...it.shares } };
         const shares = {};
         (it.sharedBy || []).forEach(pi => shares[pi] = 1);
-        return { name: it.name, price: it.price, shares };
+        return { name: it.name, price: it.price, category: it.category || tx.category, shares };
       }),
       taxMode: saved.taxMode || 'percent', taxValue: saved.taxValue || 0,
       tipMode: saved.tipMode || 'percent', tipValue: saved.tipValue || 0,
@@ -2794,14 +2868,14 @@ function openSplitModal(txId) {
     };
   } else {
     sc = {
-      txId, txAmount: tx.amount, txDesc: tx.description,
+      txId, txAmount: tx.amount, txDesc: tx.description, txCategory: tx.category,
       mode: 'quick',
       splitAmount: tx.amount,
       remainingOption: 'mine',
       remainingPerson: 1,
       people: ['Me', ''],
       quickAmounts: [tx.amount, 0],
-      items: [{ name: '', price: '', shares: { 0: 1 } }],
+      items: [{ name: '', price: '', category: tx.category, shares: { 0: 1 } }],
       taxMode: 'percent', taxValue: 0,
       tipMode: 'percent', tipValue: 0,
       splitMethod: 'proportional',
@@ -3001,6 +3075,8 @@ function renderSplitItems() {
     `<th class="center">${i === 0 ? 'Me' : (p.trim() || `P${i+1}`)}</th>`
   ).join('');
 
+  const catOptions = db.categories.map(c => `<option value="${c}">${c}</option>`).join('');
+
   const rows = sc.items.map((item, idx) => {
     const shareInputs = sc.people.map((_, pi) => {
       const val = item.shares[pi] || 0;
@@ -3008,11 +3084,16 @@ function renderSplitItems() {
         value="${val}" min="0" step="1" placeholder="0"
         oninput="updateItemShare(${idx},${pi},this.value)"></td>`;
     }).join('');
+    const itemCat = item.category || sc.txCategory;
+    const catSelect = `<select class="split-item-cat" onchange="sc.items[${idx}].category=this.value">
+      ${db.categories.map(c => `<option value="${c}" ${c === itemCat ? 'selected' : ''}>${c}</option>`).join('')}
+    </select>`;
     return `<tr>
       <td><input class="split-item-name" type="text" placeholder="Item description" value="${escHtml(item.name)}"
         oninput="sc.items[${idx}].name=this.value"></td>
       <td><input class="split-item-price" type="number" placeholder="0.00" value="${item.price}"
         min="0" step="0.01" oninput="sc.items[${idx}].price=this.value;calcSplit()"></td>
+      <td>${catSelect}</td>
       ${shareInputs}
       <td class="center"><button class="split-remove-btn" onclick="removeSplitItem(${idx})">✕</button></td>
     </tr>`;
@@ -3020,7 +3101,7 @@ function renderSplitItems() {
 
   document.getElementById('split-items-wrap').innerHTML = `
     <table class="split-table">
-      <thead><tr><th>Item</th><th>Price ($)</th>${peopleHeaders}<th></th></tr></thead>
+      <thead><tr><th>Item</th><th>Price ($)</th><th>Category</th>${peopleHeaders}<th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -3066,7 +3147,7 @@ function removeSplitPerson(idx) {
 }
 
 function addSplitItem() {
-  sc.items.push({ name: '', price: '', shares: { 0: 1 } });
+  sc.items.push({ name: '', price: '', category: sc.txCategory, shares: { 0: 1 } });
   renderSplitItems();
   calcSplit();
 }
@@ -3203,7 +3284,7 @@ function applySplit() {
     remainingPerson: sc.remainingPerson,
     people: [...sc.people],
     quickAmounts: [...sc.quickAmounts],
-    items: sc.items.map(it => ({ name: it.name, price: it.price, shares: { ...it.shares } })),
+    items: sc.items.map(it => ({ name: it.name, price: it.price, category: it.category || sc.txCategory, shares: { ...it.shares } })),
     taxMode: sc.taxMode, taxValue: sc.taxValue,
     tipMode: sc.tipMode, tipValue: sc.tipValue,
     splitMethod: sc.splitMethod,
