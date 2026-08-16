@@ -358,6 +358,10 @@
   .edit-desc { border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; font-size: 13px; background: transparent; width: 100%; min-width: 120px; outline: none; color: var(--text); }
   .edit-desc:hover { border-color: var(--border); background: var(--surface); }
   .edit-desc:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 2px #e0e7ff; }
+  /* Editable note */
+  .edit-note { border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; font-size: 12px; background: transparent; width: 100%; min-width: 80px; outline: none; color: var(--muted); }
+  .edit-note:hover { border-color: var(--border); background: var(--surface); }
+  .edit-note:focus { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 2px #e0e7ff; color: var(--text); }
   /* Row highlight states */
   tr.row-needs-request td { background: #fff7ed !important; }
   tr.row-needs-request td:first-child { border-left: 3px solid #f97316; }
@@ -547,6 +551,7 @@
             <th class="sortable" data-sort="card" onclick="sortTransactions('card')">Card</th>
             <th class="sortable" data-sort="description" onclick="sortTransactions('description')">Description</th>
             <th class="sortable" data-sort="category" onclick="sortTransactions('category')">Category</th>
+            <th>Notes</th>
             <th class="sortable" data-sort="amount" onclick="sortTransactions('amount')" style="text-align:right">Charged</th>
             <th class="sortable" data-sort="myShare" onclick="sortTransactions('myShare')" style="text-align:right">My Share</th>
             <th class="sortable" data-sort="owed" onclick="sortTransactions('owed')" style="text-align:right">Owed by Others</th>
@@ -2147,10 +2152,6 @@ function renderTransactions() {
         ? `<button class="flag-btn flagged" onclick="toggleFlag('${safeId}')" title="Remove flag">⚑ Flagged</button>`
         : `<button class="flag-btn" onclick="toggleFlag('${safeId}')" title="Flag for review">⚑</button>`);
     }
-    // Notes button
-    actions.push(hasNote
-      ? `<button class="note-btn has-note" onclick="toggleNoteRow('${safeId}')" title="Hide/show note">📝 Note</button>`
-      : `<button class="note-btn" onclick="toggleNoteRow('${safeId}')" title="Add note">📝</button>`);
     // Delete button
     actions.push(`<button class="del-btn" onclick="deleteTransaction('${safeId}')" title="Delete transaction">🗑</button>`);
 
@@ -2158,28 +2159,20 @@ function renderTransactions() {
       `<option value="${c}" ${c === t.category ? 'selected' : ''}>${c}</option>`
     ).join('');
 
-    const txRow = `<tr class="${rowClass}" data-txid="${escHtml(t.id)}">
+    const noteValue = edit.note || '';
+
+    return `<tr class="${rowClass}" data-txid="${escHtml(t.id)}">
       <td class="reviewed-cell"><input type="checkbox" class="reviewed-check" ${reviewed ? 'checked' : ''} onchange="toggleReviewed('${safeId}', this.checked)" title="Mark as reviewed"></td>
       <td style="white-space:nowrap;color:var(--muted)">${t.displayDate}</td>
       <td>${cardBadge(t.card)}</td>
       <td style="max-width:240px"><input class="edit-desc" type="text" value="${escHtml(displayDesc)}" data-id="${escHtml(t.id)}" onchange="updateDescription(this)" title="${escHtml(displayDesc)}"></td>
       <td><select class="edit-select" data-id="${escHtml(t.id)}" onchange="updateCategory(this)">${catOptions}</select></td>
+      <td style="max-width:150px"><input class="edit-note" type="text" value="${escHtml(noteValue)}" data-id="${escHtml(t.id)}" onchange="saveNote('${safeId}', this.value)" placeholder="Add note..." title="${escHtml(noteValue)}"></td>
       <td style="text-align:right">${chargedFmt}</td>
       <td style="text-align:right">${myShareFmt}</td>
       <td style="text-align:right">${owedFmt}</td>
       <td><div class="row-actions">${actions.join('')}</div></td>
     </tr>`;
-
-    // Include note row if note exists
-    const noteRow = hasNote ? `<tr class="note-row" data-noteid="${escHtml(t.id)}">
-      <td colspan="9">
-        <div style="display:flex;gap:8px;align-items:flex-start">
-          <textarea class="note-input" placeholder="Add a note..." rows="2" oninput="saveNote('${safeId}', this.value)">${escHtml(edit.note || '')}</textarea>
-        </div>
-      </td>
-    </tr>` : '';
-
-    return txRow + noteRow;
   }).join('');
 
   // Footer totals
@@ -2191,7 +2184,7 @@ function renderTransactions() {
   const totalReturns = returns.reduce((s, t) => s + t.myShare, 0);
 
   foot.innerHTML = `<tr>
-    <td colspan="5" style="text-align:right">Totals (${txs.length} transactions)</td>
+    <td colspan="6" style="text-align:right">Totals (${txs.length} transactions)</td>
     <td style="text-align:right">-${fmt(totalCharged)}${totalReturns > 0 ? ` <span class="amount-pos">+${fmt(totalReturns)}</span>` : ''}</td>
     <td style="text-align:right">-${fmt(totalMyShare)}${totalReturns > 0 ? ` <span class="amount-pos">+${fmt(totalReturns)}</span>` : ''}</td>
     <td style="text-align:right">${totalOwed > 0.01 ? `<span class="amount-owed">-${fmt(totalOwed)}</span>` : '—'}</td>
@@ -2408,14 +2401,6 @@ function saveNote(id, value) {
   if (!db.transactionEdits[id]) db.transactionEdits[id] = {};
   db.transactionEdits[id].note = value;
   saveDB();
-  // Update the note button appearance
-  const hasNote = value.trim().length > 0;
-  const row = findRowById(id);
-  const btn = row?.querySelector('.note-btn');
-  if (btn) {
-    btn.className = `note-btn${hasNote ? ' has-note' : ''}`;
-    btn.innerHTML = hasNote ? '📝 Note' : '📝';
-  }
 }
 
 // ============================================================
